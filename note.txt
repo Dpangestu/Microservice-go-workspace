@@ -1,0 +1,3 @@
+*** migrasi ***
+migrate -path ./migrations -database "mysql://root:@tcp(127.0.0.1:3306)/nova_api" drop
+migrate -path ./migrations -database "mysql://root:@tcp(127.0.0.1:3306)/nova_api" up

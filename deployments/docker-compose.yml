@@ -1,0 +1,94 @@
+name: bkc-microservice
+
+networks:
+  app-net: {}
+
+volumes:
+  redis_data:
+
+services:
+  # --- Redis Cache ---
+  redis:
+    image: redis:7.2-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [app-net]
+    restart: unless-stopped
+
+  # --- Loki (log aggregator) ---
+  loki:
+    image: grafana/loki:2.9.8
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki-config.yaml:/etc/loki/local-config.yaml:ro
+    networks: [app-net]
+    restart: unless-stopped
+
+  # --- Promtail (log shipper) ---
+  promtail:
+    image: grafana/promtail:2.9.8
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - /var/log:/var/log
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./observability/promtail-config.yml:/etc/promtail/config.yml:ro
+    depends_on:
+      - loki
+    networks: [app-net]
+    restart: unless-stopped
+
+  # --- Auth Service ---
+  auth-service:
+    build:
+      context: ..
+      dockerfile: services/auth-service/Dockerfile
+    env_file:
+      - ../.env
+    environment:
+      SERVICE_NAME: auth-service
+
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      DB_NAME: ${DB_NAME:-nova_api}
+
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+
+      JWT_PRIVATE_KEY_PATH: /app/keys/private.pem
+      JWT_PUBLIC_KEY_PATH: /app/keys/public.pem
+      JWT_ISSUER: auth-service
+      OAUTH2_ACCESS_TOKEN_EXPIRATION: ${OAUTH2_ACCESS_TOKEN_EXPIRATION:-1h}
+      OAUTH2_REFRESH_TOKEN_EXPIRATION: ${OAUTH2_REFRESH_TOKEN_EXPIRATION:-168h}
+      OAUTH2_AUTH_CODE_EXPIRATION: ${OAUTH2_AUTH_CODE_EXPIRATION:-10m}
+      SERVER_PORT: ":9001"
+      TZ: Asia/Jakarta
+    volumes:
+      - ../keys:/app/keys:ro
+      - ../services/auth-service/migrations:/app/migrations:ro
+      - /etc/localtime:/etc/localtime:ro
+    # command: air
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "${AUTH_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [app-net]
+    restart: unless-stopped
