@@ -3,10 +3,17 @@ package entities
 import "time"
 
 type User struct {
-	ID           string
-	Email        string
-	PasswordHash string
-	CreatedAt    time.Time
+	ID                  string
+	username            string
+	Email               string
+	PasswordHash        string
+	salt                string
+	roleID              int
+	isActive            bool
+	isLocked            bool
+	failedLoginAttempts int
+	lastLogin           *time.Time
+	CreatedAt           time.Time
 }
 
 type OAuthClient struct {

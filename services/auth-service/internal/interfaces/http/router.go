@@ -21,6 +21,8 @@ func NewRouter(s *services.AuthService) http.Handler {
 
 	rl := shmw.RateLimitTokenPerClient(s.Dep().RDB, 60, time.Minute)
 
+	// r.HandleFunc("/auth/login", LoginHandler(s)).Methods(http.MethodPost)
+
 	r.HandleFunc("/oauth/authorize", MakeAuthorizeHandler(s)).Methods(http.MethodGet, http.MethodPost)
 	r.Handle("/oauth/token", rl(http.HandlerFunc(MakeTokenHandler(s)))).Methods(http.MethodPost)
 	r.HandleFunc("/oauth/introspect", MakeIntrospectHandler(s)).Methods(http.MethodPost)

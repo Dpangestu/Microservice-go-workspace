@@ -1,14 +1,17 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -32,9 +35,10 @@ type Dep struct {
 	SessionManager *session.Manager
 	MFAService     *mfa.Service
 
-	AccessTTL  time.Duration
-	RefreshTTL time.Duration
-	CodeTTL    time.Duration
+	AccessTTL      time.Duration
+	RefreshTTL     time.Duration
+	CodeTTL        time.Duration
+	UserServiceURL string
 }
 
 type AuthService struct{ dep Dep }
@@ -85,6 +89,7 @@ func optionalString(p *string) string {
 func (s *AuthService) IssueClientCredentials(ctx context.Context, clientID, clientSecret, scope, companyID string) (*TokenResponse, error) {
 	c, err := s.dep.ClientRepo.FindByClientID(ctx, clientID)
 	if err != nil {
+		fmt.Println("Error finding client:", err)
 		return nil, err
 	}
 	if c.Secret == nil {
@@ -156,8 +161,8 @@ func (s *AuthService) IssuePassword(ctx context.Context, clientID, clientSecret,
 	}
 
 	compID, err := s.pickCompanyID(companyID, c)
-	if err != nil {
-		return nil, err
+	if err != nil || !ok {
+		return nil, errors.New("company not found")
 	}
 
 	at, err := s.dep.KeyStore.SignWithActive(sharedsec.TokenClaims{
@@ -208,7 +213,10 @@ func (s *AuthService) IssuePassword(ctx context.Context, clientID, clientSecret,
 }
 
 func (s *AuthService) StartAuthorizationCode(ctx context.Context, userID, clientID, redirectURI, scope, codeChallenge, codeMethod, companyID string) (string, error) {
+	log.Println("[AuthService] StartAuthorizationCode called with:", userID, clientID, redirectURI, scope, codeChallenge, codeMethod, companyID)
 	c, err := s.dep.ClientRepo.FindByClientID(ctx, clientID)
+	log.Printf("[AuthService] Client found: id=%s, redirect_uri=%v, company_id=%v", c.ID, c.RedirectURI, c.CompanyID)
+
 	if err != nil {
 		return "", err
 	}
@@ -270,7 +278,9 @@ func (s *AuthService) StartAuthorizationCode(ctx context.Context, userID, client
 
 func (s *AuthService) ExchangeAuthorizationCode(ctx context.Context, clientID, clientSecret, code, redirectURI, codeVerifier string) (*TokenResponse, error) {
 	c, err := s.dep.ClientRepo.FindByClientID(ctx, clientID)
+	log.Println("Client fetched during code exchange:", c)
 	if err != nil {
+		log.Println("Error finding client during code exchange:", err)
 		return nil, err
 	}
 	if c.Secret != nil && subtle.ConstantTimeCompare([]byte(*c.Secret), []byte(clientSecret)) != 1 {
@@ -565,6 +575,113 @@ func (s *AuthService) Revoke(ctx context.Context, token, tokenTypeHint string) e
 		}
 	}
 	return nil
+}
+
+func (s *AuthService) IssueTokenPair(ctx context.Context, userID, clientID, companyID string) (access, refresh string, err error) {
+	client, err := s.dep.ClientRepo.FindByClientID(ctx, clientID)
+	if err != nil {
+		return "", "", errors.New("invalid client")
+	}
+
+	scope := "openid profile email offline_access"
+
+	at, err := s.dep.KeyStore.SignWithActive(sharedsec.TokenClaims{
+		Scope:    scope,
+		ClientID: client.ClientID,
+		UserID:   userID,
+		Type:     "access",
+		Audience: []string{client.ClientID},
+		TenantID: companyID,
+	}, s.dep.AccessTTL)
+	if err != nil {
+		return "", "", err
+	}
+
+	rt, err := s.dep.KeyStore.SignWithActive(sharedsec.TokenClaims{
+		Scope:    scope,
+		ClientID: client.ClientID,
+		UserID:   userID,
+		Type:     "refresh",
+		Audience: []string{client.ClientID},
+		TenantID: companyID,
+	}, s.dep.RefreshTTL)
+	if err != nil {
+		return "", "", err
+	}
+
+	now := time.Now()
+	if err := s.dep.TokenRepo.Save(ctx, &entities.Token{
+		UserID:           &userID,
+		ClientID:         client.ID,
+		AccessToken:      at,
+		RefreshToken:     &rt,
+		Scopes:           &scope,
+		ExpiresAt:        now.Add(s.dep.AccessTTL),
+		RefreshExpiresAt: now.Add(s.dep.RefreshTTL),
+		CompanyID:        companyID,
+	}); err != nil {
+		return "", "", err
+	}
+
+	return at, rt, nil
+}
+
+func (s *AuthService) LoginWithPasswordGrant(ctx context.Context, email, password, clientID, clientSecret string) (map[string]any, error) {
+	log.Println("LoginWithPasswordGrant called with:", email)
+	log.Println("Password received:", password)
+	client, err := s.dep.ClientRepo.FindByClientID(ctx, clientID)
+	if err != nil {
+		return nil, errors.New("invalid client 1")
+	}
+
+	if client.Secret == nil || *client.Secret != clientSecret {
+		return nil, errors.New("invalid client 2")
+	}
+
+	// Panggil user-service buat validasi email+password
+	userSvcURL := fmt.Sprintf("%s/internal/users/authenticate", s.dep.UserServiceURL)
+	reqBody, _ := json.Marshal(map[string]string{
+		"email":    email,
+		"password": password,
+	})
+
+	resp, err := http.Post(userSvcURL, "application/json", bytes.NewBuffer(reqBody))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("invalid user credentials")
+	}
+
+	var userData struct {
+		ID        string `json:"id"`
+		Email     string `json:"email"`
+		CompanyID string `json:"companyId"`
+		RoleID    string `json:"roleId"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&userData); err != nil {
+		return nil, err
+	}
+
+	access, refresh, err := s.IssueTokenPair(ctx, userData.ID, clientID, userData.CompanyID)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]any{
+		"access_token":  access,
+		"refresh_token": refresh,
+		"token_type":    "bearer",
+		"expires_in":    int64(s.dep.AccessTTL.Seconds()),
+		"user": map[string]any{
+			"id":         userData.ID,
+			"email":      userData.Email,
+			"company_id": userData.CompanyID,
+			"role_id":    userData.RoleID,
+		},
+	}, nil
 }
 
 func pkceS256(verifier string) string {

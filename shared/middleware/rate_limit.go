@@ -2,12 +2,17 @@ package middleware
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+)
+
+const (
+	meEndpointRateLimitPrefix = "rl:user:me:"
 )
 
 func RateLimitTokenEndpoint(rdb *redis.Client, limit int, window time.Duration) func(http.Handler) http.Handler {
@@ -119,4 +124,65 @@ func clientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// RateLimitUserMeEndpoint middleware untuk rate limit /user/me per user
+func RateLimitUserMeEndpoint(rdb *redis.Client, limit int, window time.Duration) func(http.Handler) http.Handler {
+	if rdb == nil || limit <= 0 || window <= 0 {
+		return func(next http.Handler) http.Handler { return next }
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+
+			// Ambil user ID dari header (set by gateway)
+			userID := r.Header.Get("X-User-Id")
+			if userID == "" {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			key := fmt.Sprintf("%s%s", meEndpointRateLimitPrefix, userID)
+
+			now := time.Now().UnixNano()
+			cut := now - window.Nanoseconds()
+
+			// Gunakan sliding window (sama dengan RateLimitSlidingWindow di shared)
+			pipe := rdb.TxPipeline()
+			pipe.ZRemRangeByScore(ctx, key, "0", fmt.Sprint(cut))
+			pipe.ZAdd(ctx, key, redis.Z{Score: float64(now), Member: now})
+			pipe.Expire(ctx, key, window)
+			cardCmd := pipe.ZCard(ctx, key)
+
+			if _, err := pipe.Exec(ctx); err != nil {
+				log.Printf("[RateLimit] Error on rate limit check: %v", err)
+				// Fallback: jangan block jika Redis error
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			count := int(cardCmd.Val())
+			remaining := limit - count
+
+			if remaining < 0 {
+				remaining = 0
+			}
+
+			// Set response headers
+			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", limit))
+			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", time.Now().Add(window).Unix()))
+
+			// Check limit
+			if count > limit {
+				log.Printf("[RateLimit] User %s exceeded rate limit (%d/%d requests)", userID, count, limit)
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", int(window.Seconds())))
+				http.Error(w, "rate_limit_exceeded", http.StatusTooManyRequests)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }

@@ -48,6 +48,33 @@ services:
     restart: unless-stopped
 
   # --- Auth Service ---
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: services/api-gateway/Dockerfile
+    env_file:
+      - ../.env
+    environment:
+      SERVICE_NAME: api-gateway
+      AUTH_JWKS_URL: http://auth-service:9001/oauth/jwks
+      SERVER_PORT: ${GATEWAY_PORT:-9000}
+      USER_SERVICE_URL: "http://user-service:9002"
+      JWT_PRIVATE_KEY_PATH: /app/keys/private.pem
+      JWT_PUBLIC_KEY_PATH: /app/keys/public.pem
+      REDIS_ADDR: "redis:6379"
+      TZ: Asia/Jakarta
+    volumes:
+      - ../keys:/app/keys:ro
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      user-service:
+        condition: service_started
+      redis:
+        condition: service_started
+    ports: ["${GATEWAY_PORT:-9000}:9000"]
+    networks: [app-net]
+    restart: unless-stopped
+
   auth-service:
     build:
       context: ..
@@ -61,7 +88,7 @@ services:
       DB_PORT: ${DB_PORT:-3306}
       DB_USER: ${DB_USER:-root}
       DB_PASSWORD: ${DB_PASSWORD:-}
-      DB_NAME: ${DB_NAME:-nova_api}
+      DB_NAME: ${DB_NAME_AUTH:-nova_api}
 
       REDIS_ADDR: "redis:6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
@@ -73,20 +100,59 @@ services:
       OAUTH2_ACCESS_TOKEN_EXPIRATION: ${OAUTH2_ACCESS_TOKEN_EXPIRATION:-1h}
       OAUTH2_REFRESH_TOKEN_EXPIRATION: ${OAUTH2_REFRESH_TOKEN_EXPIRATION:-168h}
       OAUTH2_AUTH_CODE_EXPIRATION: ${OAUTH2_AUTH_CODE_EXPIRATION:-10m}
+      USER_SERVICE_URL: http://user-service:9002
       SERVER_PORT: ":9001"
       TZ: Asia/Jakarta
     volumes:
       - ../keys:/app/keys:ro
       - ../services/auth-service/migrations:/app/migrations:ro
       - /etc/localtime:/etc/localtime:ro
-    # command: air
     depends_on:
       redis:
         condition: service_healthy
     ports:
       - "${AUTH_PORT:-9001}:9001"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8081/healthz"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:9001/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [app-net]
+    restart: unless-stopped
+
+  # --- User Service ---
+  user-service:
+    build:
+      context: ..
+      dockerfile: services/user-service/Dockerfile
+    env_file:
+      - ../.env
+    environment:
+      SERVICE_NAME: user-service
+      USER_SERVICE_URL: http://user-service:9002
+      INTERNAL_API_KEY: shared-secret
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      DB_NAME: ${DB_NAME_USER:-nova_api}
+
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+
+      SERVER_PORT: ":9002"
+      TZ: Asia/Jakarta
+    volumes:
+      - ../services/user-service/migrations:/app/migrations:ro
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "${USER_PORT:-9002}:9002"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9002/healthz"]
       interval: 10s
       timeout: 3s
       retries: 10

@@ -38,9 +38,9 @@ func main() {
 	})
 	defer pool.Close()
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
-		cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Name)
-	shdb.MustRunMigrations(dsn, "./migrations")
+	// dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
+	// 	cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Name)
+	// shdb.MustRunMigrations(dsn, "./migrations")
 
 	activeKid := os.Getenv("JWT_ACTIVE_KID")
 	if activeKid == "" {
@@ -88,6 +88,7 @@ func main() {
 		AccessTTL:      cfg.JWT.AccessTTL,
 		RefreshTTL:     cfg.JWT.RefreshTTL,
 		CodeTTL:        cfg.JWT.AuthCodeTTL,
+		UserServiceURL: cfg.UserServiceURL,
 	})
 
 	r := httpif.NewRouter(authSvc)

@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -33,11 +34,26 @@ type JWTcfg struct {
 	AuthCodeTTL    time.Duration
 }
 
+type RedisConfig struct {
+	Addr     string
+	Password string
+	DB       int
+}
+
+type RateLimitConfig struct {
+	Enabled     bool
+	WindowSize  time.Duration // default 1m
+	MaxRequests int           // requests per window
+}
+
 type Config struct {
-	Server ServerCfg
-	DB     DBcfg
-	JWT    JWTcfg
-	Env    string
+	Server         ServerCfg
+	DB             DBcfg
+	JWT            JWTcfg
+	Env            string
+	UserServiceURL string
+	Redis          RedisConfig
+	RateLimit      RateLimitConfig
 }
 
 func tryLoadDotEnv() {
@@ -95,6 +111,8 @@ func MustLoad() *Config {
 	refreshTTL := parseDurOr(getEnv("OAUTH2_REFRESH_TOKEN_EXPIRATION", "720h"), 720*time.Hour)
 	authCodeTTL := parseDurOr(getEnv("OAUTH2_AUTH_CODE_EXPIRATION", "10m"), 10*time.Minute)
 
+	userSvcURL := getEnv("USER_SERVICE_URL", "http://user-service:9002")
+
 	return &Config{
 		Env: getEnv("APP_ENV", "local"),
 		Server: ServerCfg{
@@ -118,6 +136,19 @@ func MustLoad() *Config {
 			RefreshTTL:     refreshTTL,
 			AuthCodeTTL:    authCodeTTL,
 		},
+
+		UserServiceURL: userSvcURL,
+
+		Redis: RedisConfig{
+			Addr:     getEnv("REDIS_ADDR", "redis:6379"),
+			Password: os.Getenv("REDIS_PASSWORD"),
+			DB:       0,
+		},
+		RateLimit: RateLimitConfig{
+			Enabled:     getEnv("RATE_LIMIT_ENABLED", "true") == "true",
+			WindowSize:  parseDurOr(getEnv("RATE_LIMIT_WINDOW", "1m"), 1*time.Minute),
+			MaxRequests: parseInt(getEnv("RATE_LIMIT_MAX_REQUESTS", "60"), 60),
+		},
 	}
 }
 
@@ -128,4 +159,12 @@ func parseDurOr(s string, def time.Duration) time.Duration {
 		return def
 	}
 	return d
+}
+
+func parseInt(s string, def int) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return def
+	}
+	return n
 }

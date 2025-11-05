@@ -1,3 +1,20 @@
 *** migrasi ***
 migrate -path ./migrations -database "mysql://root:@tcp(127.0.0.1:3306)/nova_api" drop
 migrate -path ./migrations -database "mysql://root:@tcp(127.0.0.1:3306)/nova_api" up
+
+# Jalankan migrasi auth-service
+migrate -path ./services/auth-service/migrations \
+        -database "mysql://root:@tcp(127.0.0.1:3306)/nova_api" up
+
+# Jalankan migrasi user-service (jika perlu)
+migrate -path ./services/user-service/migrations \
+        -database "mysql://root:@tcp(127.0.0.1:3306)/nova_api?x-migrations-table=user_service_migrations" up
+
+# new
+migrate -path ./services/auth-service/migrations -database "mysql://root:@tcp(localhost:3306)/nova_api" up
+migrate -path ./services/user-service/migrations -database "mysql://root:@tcp(localhost:3306)/nova_api" up
+
+
+migrate -path ./services/auth-service/migrations -database "mysql://root:@tcp(127.0.0.1:3306)/nova_api?x-migrations-table=auth_service_migrations" up
+migrate -path ./services/user-service/migrations -database "mysql://root:@tcp(127.0.0.1:3306)/nova_api?x-migrations-table=user_service_migrations" up
+

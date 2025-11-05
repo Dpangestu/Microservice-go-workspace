@@ -1,6 +1,23 @@
 CREATE TABLE IF NOT EXISTS users (
   id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  username VARCHAR(50) UNIQUE NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  salt VARCHAR(255) NOT NULL,
+  role_id INT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  is_locked BOOLEAN NOT NULL DEFAULT FALSE,
+  failed_login_attempts INT NOT NULL DEFAULT 0,
+  last_login DATETIME,
+  last_password_change DATETIME,
+  password_expires_at DATETIME,
+  two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  two_factor_secret VARCHAR(255),
+  session_token VARCHAR(255),
+  remember_token VARCHAR(255),
+  email_verified_at DATETIME,
+  phone_verified_at DATETIME,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at DATETIME
 );
