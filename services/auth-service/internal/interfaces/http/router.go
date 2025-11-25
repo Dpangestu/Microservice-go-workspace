@@ -19,7 +19,7 @@ func NewRouter(s *services.AuthService) http.Handler {
 
 	r.Use(shhttp.Recovery)
 
-	rl := shmw.RateLimitTokenPerClient(s.Dep().RDB, 60, time.Minute)
+	rl := shmw.RateLimitSlidingWindow(s.Dep().RDB, "rl:auth:token", 60, time.Minute)
 
 	// r.HandleFunc("/auth/login", LoginHandler(s)).Methods(http.MethodPost)
 

@@ -22,24 +22,99 @@ ON DUPLICATE KEY UPDATE name = VALUES(name);
 -- ===== Permissions =====
 INSERT INTO permissions (id, name, description, resource, action, created_at)
 VALUES
-  (1, 'user.view', 'View user data', 'users', 'read', NOW()),
-  (2, 'user.manage', 'Manage user data', 'users', 'write', NOW()),
-  (3, 'role.manage', 'Manage roles and permissions', 'roles', 'write', NOW()),
-  (4, 'tenant.manage', 'Manage tenants', 'tenants', 'write', NOW()),
-  (5, 'audit.view', 'View audit logs', 'audits', 'read', NOW())
+  (1, 'user.read', 'View user list and details', 'users', 'read', NOW()),
+  (2, 'user.read_self', 'View own profile only', 'users', 'read_self', NOW()),
+  (3, 'user.create', 'Create new users', 'users', 'create', NOW()),
+  (4, 'user.update', 'Update user information', 'users', 'update', NOW()),
+  (5, 'user.update_self', 'Update own profile only', 'users', 'update_self', NOW()),
+  (6, 'user.delete', 'Delete users', 'users', 'delete', NOW()),
+  (7, 'user.manage_profile', 'Manage user profiles', 'users', 'manage_profile', NOW()),
+  (8, 'user.manage_settings', 'Manage user settings', 'users', 'manage_settings', NOW()),
+  (9, 'user.view_activity', 'View user activity logs', 'users', 'view_activity', NOW()),
+
+-- 3.2 Roles Permissions (4)
+  (10, 'role.read', 'View roles', 'roles', 'read', NOW()),
+  (11, 'role.create', 'Create new roles', 'roles', 'create', NOW()),
+  (12, 'role.update', 'Update roles', 'roles', 'update', NOW()),
+  (13, 'role.delete', 'Delete roles', 'roles', 'delete', NOW()),
+
+-- 3.3 Permissions Management (4)
+  (14, 'permission.read', 'View permissions', 'permissions', 'read', NOW()),
+  (15, 'permission.create', 'Create permissions', 'permissions', 'create', NOW()),
+  (16, 'permission.update', 'Update permissions', 'permissions', 'update', NOW()),
+  (17, 'permission.delete', 'Delete permissions', 'permissions', 'delete', NOW()),
+
+-- 3.4 Role Permissions (2)
+  (18, 'role_permission.assign', 'Assign permissions to roles', 'role_permissions', 'assign', NOW()),
+  (19, 'role_permission.revoke', 'Revoke permissions from roles', 'role_permissions', 'revoke', NOW()),
+
+-- 3.5 Audit & Logs (4)
+  (20, 'audit.read', 'View audit logs', 'audits', 'read', NOW()),
+  (21, 'audit.export', 'Export audit logs', 'audits', 'export', NOW()),
+  (22, 'log.read', 'View system logs', 'logs', 'read', NOW()),
+  (23, 'log.delete', 'Delete logs', 'logs', 'delete', NOW()),
+
+-- 3.6 Reports (3)
+  (24, 'report.read', 'View reports', 'reports', 'read', NOW()),
+  (25, 'report.create', 'Create reports', 'reports', 'create', NOW()),
+  (26, 'report.export', 'Export reports', 'reports', 'export', NOW()),
+
+-- 3.7 Tenants (5)
+  (27, 'tenant.read', 'View tenants', 'tenants', 'read', NOW()),
+  (28, 'tenant.create', 'Create new tenants', 'tenants', 'create', NOW()),
+  (29, 'tenant.update', 'Update tenant information', 'tenants', 'update', NOW()),
+  (30, 'tenant.delete', 'Delete tenants', 'tenants', 'delete', NOW()),
+  (31, 'tenant.manage_settings', 'Manage tenant settings', 'tenants', 'manage_settings', NOW()),
+
+-- 3.8 System Configuration (4)
+  (32, 'system.read_config', 'Read system configuration', 'system', 'read_config', NOW()),
+  (33, 'system.write_config', 'Modify system configuration', 'system', 'write_config', NOW()),
+  (34, 'system.manage_backup', 'Manage backups', 'system', 'manage_backup', NOW()),
+  (35, 'system.manage_database', 'Manage database', 'system', 'manage_database', NOW()),
+
+-- 3.9 Features (2)
+  (36, 'feature.read', 'View available features', 'features', 'read', NOW()),
+  (37, 'feature.enable', 'Enable/disable features', 'features', 'enable', NOW()),
+
+-- 3.10 Settings (2)
+  (38, 'setting.read', 'Read settings', 'settings', 'read', NOW()),
+  (39, 'setting.write', 'Write settings', 'settings', 'write', NOW()),
+
+-- 3.11 API Keys (3)
+  (40, 'api_key.read', 'View API keys', 'api_keys', 'read', NOW()),
+  (41, 'api_key.create', 'Create API keys', 'api_keys', 'create', NOW()),
+  (42, 'api_key.delete', 'Revoke API keys', 'api_keys', 'delete', NOW()),
+
+-- 3.12 Webhooks (4)
+  (43, 'webhook.read', 'View webhooks', 'webhooks', 'read', NOW()),
+  (44, 'webhook.create', 'Create webhooks', 'webhooks', 'create', NOW()),
+  (45, 'webhook.update', 'Update webhooks', 'webhooks', 'update', NOW()),
+  (46, 'webhook.delete', 'Delete webhooks', 'webhooks', 'delete', NOW()),
+
+-- 3.13 Dashboard & Analytics (3)
+  (47, 'dashboard.read', 'View dashboard', 'dashboard', 'read', NOW()),
+  (48, 'analytics.read', 'View analytics', 'analytics', 'read', NOW()),
+  (49, 'notification.read', 'Read notifications', 'notifications', 'read', NOW()),
+
+-- 3.14 Notifications (2)
+  (50, 'notification.manage', 'Manage notifications', 'notifications', 'manage', NOW()),
+
+-- 3.15 Content Management (5)
+  (51, 'content.read', 'View content', 'content', 'read', NOW()),
+  (52, 'content.create', 'Create content', 'content', 'create', NOW()),
+  (53, 'content.update', 'Update content', 'content', 'update', NOW()),
+  (54, 'content.delete', 'Delete content', 'content', 'delete', NOW()),
+  (55, 'content.publish', 'Publish content', 'content', 'publish', NOW())
 ON DUPLICATE KEY UPDATE description = VALUES(description);
 
 -- ===== Role Permissions =====
 INSERT INTO role_permissions (role_id, permission_id)
 VALUES
-  (1, 1),
-  (1, 2),
-  (1, 3),
-  (1, 4),
-  (1, 5),
-  (2, 1),
-  (2, 2),
-  (3, 1)
+  (1,1),(1,2),(1,3),(1,4),(1,5),(1,6),(1,7),(1,8),(1,9),
+  (1,10),(1,11),(1,12),(1,13),(1,14),(1,15),(1,16),(1,17),(1,18),(1,19),
+  (1,20),(1,21),(1,22),(1,23),(1,24),(1,25),(1,26),(1,27),(1,28),(1,29),(1,30),(1,31),
+  (1,32),(1,33),(1,34),(1,35),(1,36),(1,37),(1,38),(1,39),(1,40),(1,41),(1,42),
+  (1,43),(1,44),(1,45),(1,46),(1,47),(1,48),(1,49),(1,50),(1,51),(1,52),(1,53),(1,54),(1,55)
 ON DUPLICATE KEY UPDATE permission_id = VALUES(permission_id);
 
 -- ===== Users =====

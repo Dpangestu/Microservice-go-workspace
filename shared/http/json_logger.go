@@ -23,7 +23,7 @@ type logRec struct {
 func JSONLogger(next http.Handler) http.Handler {
 	svc := os.Getenv("SERVICE_NAME")
 	if svc == "" {
-		svc = "unknown"
+		svc = "api-gateway" // API Gateway service name
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -32,14 +32,19 @@ func JSONLogger(next http.Handler) http.Handler {
 			reqID = uuid.NewString()
 		}
 
-		ww := &writer{ResponseWriter: w, status: http.StatusOK}
+		// FIX: Initialize wroteHeader flag
+		ww := &writer{
+			ResponseWriter: w,
+			statusCode:     http.StatusOK,
+			wroteHeader:    false, // ← ADD THIS
+		}
 		next.ServeHTTP(ww, r)
 
 		rec := logRec{
 			TS:        time.Now().Format(time.RFC3339Nano),
 			Method:    r.Method,
 			Path:      r.URL.Path,
-			Status:    ww.status,
+			Status:    ww.statusCode, // FIX: Gunakan statusCode
 			LatencyMs: time.Since(start).Milliseconds(),
 			ClientIP:  r.Header.Get("X-Forwarded-For"),
 			ReqID:     reqID,
@@ -51,10 +56,17 @@ func JSONLogger(next http.Handler) http.Handler {
 
 type writer struct {
 	http.ResponseWriter
-	status int
+	statusCode  int  // FIX: Ubah nama
+	wroteHeader bool // FIX: ADD THIS
 }
 
 func (w *writer) WriteHeader(code int) {
-	w.status = code
+	// FIX: Cegah double WriteHeader
+	if w.wroteHeader {
+		return
+	}
+
+	w.wroteHeader = true
+	w.statusCode = code
 	w.ResponseWriter.WriteHeader(code)
 }

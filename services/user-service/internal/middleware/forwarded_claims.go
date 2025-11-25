@@ -12,7 +12,6 @@ type ctxKey string
 
 const claimsKey ctxKey = "jwt_claims"
 
-// Ambil klaim yang sudah diverifikasi di API Gateway dari header X-*
 func InjectClaimsFromGateway(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c := &shsec.TokenClaims{

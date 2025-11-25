@@ -5,35 +5,39 @@ import (
 	"strings"
 )
 
-// MaskUserBundleByScope menghapus field sensitif berdasarkan JWT scope
+// Scope constants
+const (
+	ScopeProfileEmail     = "profile email"
+	ScopeProfileBasic     = "profile"
+	ScopeProfileSensitive = "profile:sensitive"
+)
+
+// MaskUserBundleByScope menghapus field sensitif berdasarkan scope JWT
 func MaskUserBundleByScope(bundle map[string]interface{}, scope string) map[string]interface{} {
 	scopes := parseScopes(scope)
 
 	// Default: mask semua field sensitif
-	if !hasScope(scopes, "profile:sensitive") && !hasScope(scopes, "profile:admin") {
+	if !hasScope(scopes, "profile:sensitive") {
 		// Hapus field sensitif dari data
 		if data, ok := bundle["data"].(map[string]interface{}); ok {
-			// Hide sensitive fields untuk non-admin scope
-			delete(data, "failedLoginAttempts")
-			delete(data, "isLocked")
+			// Bisa mask failedLoginAttempts, isLocked untuk non-sensitive scope
+			if !hasScope(scopes, "profile:admin") {
+				delete(data, "failedLoginAttempts")
+				delete(data, "isLocked")
+			}
 		}
 
-		// Mask metadata sensitif dari profile
+		// Hapus field sensitif dari profile metadata jika ada
 		if profile, ok := bundle["profile"].(map[string]interface{}); ok {
 			if metadata, ok := profile["metadata"].(map[string]interface{}); ok {
-				// Hanya expose non-sensitive metadata fields
+				// Hanya tampilkan metadata public fields
 				publicMetadata := make(map[string]interface{})
-				whitelistedKeys := map[string]bool{
-					"title":      true,
-					"department": true,
-				}
-
 				for k, v := range metadata {
-					if whitelistedKeys[k] {
+					// Whitelist: hanya certain fields yang boleh di-expose
+					if k == "title" {
 						publicMetadata[k] = v
 					}
 				}
-
 				if len(publicMetadata) > 0 {
 					profile["metadata"] = publicMetadata
 				} else {
@@ -43,7 +47,7 @@ func MaskUserBundleByScope(bundle map[string]interface{}, scope string) map[stri
 		}
 	}
 
-	// Hapus settings untuk non-authorized scope
+	// Hapus settings kecuali user request dengan scope khusus
 	if !hasScope(scopes, "profile:settings") && !hasScope(scopes, "profile:sensitive") {
 		delete(bundle, "settings")
 	}
@@ -57,7 +61,7 @@ func parseScopes(scope string) []string {
 	return strings.Fields(strings.TrimSpace(scope))
 }
 
-// hasScope check apakah scope list mengandung target
+// hasScope check apakah scope list mengandung scope tertentu
 func hasScope(scopes []string, target string) bool {
 	for _, s := range scopes {
 		if s == target {

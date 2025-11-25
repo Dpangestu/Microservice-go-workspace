@@ -16,22 +16,23 @@ const (
 )
 
 // CacheUserBundle menyimpan user bundle ke Redis
-func (s *UserService) CacheUserBundle(ctx context.Context, userID string, data map[string]interface{}) error {
+func (s *userServiceImpl) CacheUserBundle(ctx context.Context, userID string, data map[string]interface{}) error {
 	if s.RedisClient == nil {
 		return nil // Skip jika Redis tidak tersedia
 	}
 
-	key := fmt.Sprintf("%s%s", userBundleCachePrefix, userID)
+	key := userBundleCacheKey(userID)
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		log.Printf("[UserService] Error marshaling cache data: %v", err)
-		return nil
+		return err
 	}
 
 	err = s.RedisClient.Set(ctx, key, jsonData, userBundleTTL).Err()
 	if err != nil {
 		log.Printf("[UserService] Error caching user bundle for %s: %v", userID, err)
-		return nil // Non-blocking: jangan fail
+		// Jangan fail jika cache error, tetap return data
+		return nil
 	}
 
 	log.Printf("[UserService] Cached user bundle for %s (TTL: %v)", userID, userBundleTTL)
@@ -39,12 +40,12 @@ func (s *UserService) CacheUserBundle(ctx context.Context, userID string, data m
 }
 
 // GetCachedUserBundle mengambil user bundle dari Redis
-func (s *UserService) GetCachedUserBundle(ctx context.Context, userID string) (map[string]interface{}, error) {
+func (s *userServiceImpl) GetCachedUserBundle(ctx context.Context, userID string) (map[string]interface{}, error) {
 	if s.RedisClient == nil {
 		return nil, nil // Skip jika Redis tidak tersedia
 	}
 
-	key := fmt.Sprintf("%s%s", userBundleCachePrefix, userID)
+	key := userBundleCacheKey(userID)
 	val, err := s.RedisClient.Get(ctx, key).Result()
 
 	if err == redis.Nil {
@@ -65,19 +66,23 @@ func (s *UserService) GetCachedUserBundle(ctx context.Context, userID string) (m
 	return data, nil
 }
 
-// InvalidateUserCache menghapus cache user (saat profile update)
-func (s *UserService) InvalidateUserCache(ctx context.Context, userID string) error {
+// InvalidateUserCache menghapus cache user (dipanggil saat profile update)
+func (s *userServiceImpl) InvalidateUserCache(ctx context.Context, userID string) error {
 	if s.RedisClient == nil {
 		return nil
 	}
 
-	key := fmt.Sprintf("%s%s", userBundleCachePrefix, userID)
+	key := userBundleCacheKey(userID)
 	err := s.RedisClient.Del(ctx, key).Err()
 	if err != nil {
 		log.Printf("[UserService] Error invalidating cache for %s: %v", userID, err)
-		return nil // Non-blocking
+		return nil // Tidak fail jika invalidate gagal
 	}
 
 	log.Printf("[UserService] Invalidated cache for user %s", userID)
 	return nil
+}
+
+func userBundleCacheKey(userID string) string {
+	return fmt.Sprintf("%s%s", userBundleCachePrefix, userID)
 }

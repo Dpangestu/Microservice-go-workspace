@@ -18,3 +18,13 @@ migrate -path ./services/user-service/migrations -database "mysql://root:@tcp(lo
 migrate -path ./services/auth-service/migrations -database "mysql://root:@tcp(127.0.0.1:3306)/nova_api?x-migrations-table=auth_service_migrations" up
 migrate -path ./services/user-service/migrations -database "mysql://root:@tcp(127.0.0.1:3306)/nova_api?x-migrations-table=user_service_migrations" up
 
+
+
+*** Next Steps ***
+1. Implement MFA Challenge dalam token flow
+2. Add logout endpoint untuk session revocation
+3. Implement authorization consent (scope validation)
+4. Add audit logging untuk compliance
+5. Refresh token rotation untuk security
+6. Automated token cleanup (cron job)
+7. Client metadata endpoint (.well-known/oauth-authorization-server)

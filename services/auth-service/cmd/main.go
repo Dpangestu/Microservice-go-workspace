@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	shcache "bkc_microservice/shared/cache"
 	shcfg "bkc_microservice/shared/config"
@@ -64,7 +69,11 @@ func main() {
 			DB:       0,
 		})
 	}
-	rdb, _ := rdbIface.(*redis.Client)
+
+	rdb, ok := rdbIface.(*redis.Client)
+	if !ok {
+		log.Fatalf("redis type assertion failed")
+	}
 
 	userRepo := persistence.NewMySQLUserRepo(pool)
 	clientRepo := persistence.NewMySQLClientRepo(pool)
@@ -92,8 +101,8 @@ func main() {
 	})
 
 	r := httpif.NewRouter(authSvc)
-
 	handler := shhttp.CORS(shhttp.CorrelationID(shhttp.JSONLogger(r)))
+
 	srv := shhttp.NewServer(shhttp.ServerOptions{
 		Addr:         cfg.Server.Addr,
 		Handler:      handler,
@@ -102,9 +111,29 @@ func main() {
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	})
 
-	fmt.Printf("auth-service listening on %s\n", srv.Addr)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	log.Fatal(srv.ListenAndServe())
+	go func() {
+		log.Printf("auth-service listening on %s, proxy -> %s", srv.Addr, cfg.UserServiceURL)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("gateway server error: %v", err)
+		}
+	}()
+
+	<-quit
+	log.Println("auth-service shutting down...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("gateway shutdown error: %v", err)
+	}
+	if err := rdb.Close(); err != nil {
+		log.Printf("redis close error: %v", err)
+	}
+	log.Println("auth-service stopped cleanly")
 }
 
 func envOr(k, def string) string {

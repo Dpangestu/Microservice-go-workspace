@@ -158,3 +158,41 @@ services:
       retries: 10
     networks: [app-net]
     restart: unless-stopped
+
+  sync-cbs-service:
+    build:
+      context: ..
+      dockerfile: services/sync-cbs-service/Dockerfile
+    env_file:
+      - ../.env
+    environment:
+      SERVICE_NAME: sync-cbs-service
+      SYNC_CBS_SERVICE_URL: http://sync-cbs-service:9003
+      INTERNAL_API_KEY: shared-secret
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      DB_NAME: ${DB_NAME_USER:-nova_api}
+
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+
+      SERVER_PORT: ":9003"
+      TZ: Asia/Jakarta
+    volumes:
+      - ../services/sync-cbs-service/migrations:/app/migrations:ro
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "${USER_PORT:-9003}:9003"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9003/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [app-net]
+    restart: unless-stopped

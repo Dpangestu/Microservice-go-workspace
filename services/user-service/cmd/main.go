@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	shcache "bkc_microservice/shared/cache"
@@ -12,8 +15,10 @@ import (
 	shhttp "bkc_microservice/shared/http"
 
 	appsvc "bkc_microservice/services/user-service/internal/application/services"
-	httpif "bkc_microservice/services/user-service/internal/http"
+	"bkc_microservice/services/user-service/internal/infrastructure/clients"
 	"bkc_microservice/services/user-service/internal/infrastructure/persistence"
+	httpif "bkc_microservice/services/user-service/internal/interfaces/http"
+	"bkc_microservice/services/user-service/internal/shared"
 )
 
 func main() {
@@ -43,23 +48,63 @@ func main() {
 	}
 	cancel()
 
-	// === Setup Repositories & Services ===
+	// === Setup Logger ===
+	logger := shared.NewLogger()
+
+	syncCBSURL := cfg.SyncCBSServiceURL
+	if syncCBSURL == "" {
+		syncCBSURL = "http://sync-cbs-service:9003"
+		log.Printf("[WARN] SyncCBSServiceURL not set in config, using default: %s", syncCBSURL)
+	} else {
+		log.Printf("[INFO] Sync CBS Service URL: %s", syncCBSURL)
+	}
+
+	syncCBSClient := clients.NewSyncCBSClient(syncCBSURL)
+
+	// === Setup Repositories ===
 	userRepo := persistence.NewMySQLUserRepository(pool)
-	roleRepo := persistence.NewRoleRepository(pool)
+	roleRepo := persistence.NewMySQLRoleRepository(pool)
 	permissionRepo := persistence.NewMySQLPermissionRepository(pool)
 	userActivityRepo := persistence.NewMySQLUserActivityRepository(pool)
 	profileRepo := persistence.NewMySQLUserProfileRepository(pool)
 	settingsRepo := persistence.NewMySQLUserSettingsRepository(pool)
 	rpRepo := persistence.NewMySQLRolePermissionsRepository(pool)
 
+	// === Setup Services ===
+	// User Service
 	userService := appsvc.NewUserService(
-		userRepo, roleRepo, permissionRepo, userActivityRepo,
-		profileRepo, settingsRepo, rpRepo,
+		userRepo,
+		roleRepo,
+		permissionRepo,
+		rpRepo,
+		userActivityRepo,
+		profileRepo,
+		settingsRepo,
 		rdb,
+		syncCBSClient,
+		pool,
+	)
+
+	// Role Service
+	roleService := appsvc.NewRoleService(
+		roleRepo,
+		// rpRepo,
+	)
+
+	// Permission Service
+	permService := appsvc.NewPermissionService(
+		permissionRepo,
+		rpRepo,
 	)
 
 	// === Setup HTTP Router & Middlewares ===
-	router := httpif.NewRouter(userService, rdb)
+	router := httpif.NewRouter(
+		userService,
+		roleService,
+		permService,
+		logger,
+		rdb,
+	)
 	handler := shhttp.CORS(shhttp.CorrelationID(shhttp.JSONLogger(router)))
 
 	srv := shhttp.NewServer(shhttp.ServerOptions{
@@ -70,6 +115,30 @@ func main() {
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	})
 
-	fmt.Printf("[SERVER] user-service listening on %s\n", srv.Addr)
-	log.Fatal(srv.ListenAndServe())
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("user-service listening on %s", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("user server error: %v", err)
+		}
+	}()
+
+	<-quit
+	log.Println("user-service shutting down...")
+
+	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("user shutdown error: %v", err)
+	}
+	if err := pool.Close(); err != nil {
+		log.Printf("db close error: %v", err)
+	}
+	if err := rdb.Close(); err != nil {
+		log.Printf("redis close error: %v", err)
+	}
+	log.Println("user-service stopped cleanly")
 }

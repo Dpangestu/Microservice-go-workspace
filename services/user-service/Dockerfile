@@ -29,7 +29,12 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # ---------- runtime ----------
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates curl && adduser -D -H -s /sbin/nologin app
+RUN apk add --no-cache ca-certificates curl tzdata && \
+    adduser -D -H -s /sbin/nologin app
+
+ENV TZ=Asia/Jakarta
+RUN cp /usr/share/zoneinfo/Asia/Jakarta /etc/localtime && \
+    echo "Asia/Jakarta" > /etc/timezone
 WORKDIR /app
 
 COPY --from=builder /out/user-service /app/user-service

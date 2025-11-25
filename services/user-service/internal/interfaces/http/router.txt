@@ -1,0 +1,107 @@
+package http
+
+import (
+	"net/http"
+
+	"bkc_microservice/services/user-service/internal/application/services"
+	"bkc_microservice/services/user-service/internal/interfaces/http/handlers"
+	"bkc_microservice/services/user-service/internal/shared"
+)
+
+type Router struct {
+	userHandler       *handlers.UserHandler
+	roleHandler       *handlers.RoleHandler
+	permissionHandler *handlers.PermissionHandler
+}
+
+func NewRouter(
+	userService services.UserService,
+	roleService services.RoleService,
+	permService services.PermissionService,
+	logger shared.Logger,
+) *http.ServeMux {
+	userHandler := handlers.NewUserHandler(userService, logger)
+	roleHandler := handlers.NewRoleHandler(roleService, logger)
+	permissionHandler := handlers.NewPermissionHandler(permService, logger)
+
+	mux := http.NewServeMux()
+
+	// ==================== USERS ROUTES ====================
+
+	// GET /api/v1/users?page=1&size=20&search=query
+	mux.HandleFunc("GET /api/v1/users", userHandler.ListUsers)
+
+	// POST /api/v1/users
+	mux.HandleFunc("POST /api/v1/users", userHandler.CreateUser)
+
+	// GET /api/v1/users/{id}
+	mux.HandleFunc("GET /api/v1/users/{id}", userHandler.GetUser)
+
+	// PUT /api/v1/users/{id}
+	mux.HandleFunc("PUT /api/v1/users/{id}", userHandler.UpdateUser)
+
+	// DELETE /api/v1/users/{id}
+	mux.HandleFunc("DELETE /api/v1/users/{id}", userHandler.DeleteUser)
+
+	// ==================== ROLES ROUTES ====================
+
+	// GET /api/v1/roles?page=1&size=20
+	mux.HandleFunc("GET /api/v1/roles", roleHandler.ListRoles)
+
+	// POST /api/v1/roles
+	mux.HandleFunc("POST /api/v1/roles", roleHandler.CreateRole)
+
+	// GET /api/v1/roles/{id}
+	mux.HandleFunc("GET /api/v1/roles/{id}", roleHandler.GetRole)
+
+	// PUT /api/v1/roles/{id}
+	mux.HandleFunc("PUT /api/v1/roles/{id}", roleHandler.UpdateRole)
+
+	// DELETE /api/v1/roles/{id}
+	mux.HandleFunc("DELETE /api/v1/roles/{id}", roleHandler.DeleteRole)
+
+	// ==================== PERMISSIONS ROUTES ====================
+
+	// GET /api/v1/permissions?page=1&size=20
+	mux.HandleFunc("GET /api/v1/permissions", permissionHandler.ListPermissions)
+
+	// POST /api/v1/permissions
+	mux.HandleFunc("POST /api/v1/permissions", permissionHandler.CreatePermission)
+
+	// GET /api/v1/permissions/{id}
+	mux.HandleFunc("GET /api/v1/permissions/{id}", permissionHandler.GetPermission)
+
+	// PUT /api/v1/permissions/{id}
+	mux.HandleFunc("PUT /api/v1/permissions/{id}", permissionHandler.UpdatePermission)
+
+	// DELETE /api/v1/permissions/{id}
+	mux.HandleFunc("DELETE /api/v1/permissions/{id}", permissionHandler.DeletePermission)
+
+	// GET /api/v1/permissions/resource/{resource}
+	mux.HandleFunc("GET /api/v1/permissions/resource/{resource}", permissionHandler.GetPermissionsByResource)
+
+	// ==================== ROLE-PERMISSIONS ROUTES ====================
+
+	// POST /api/v1/roles/{roleId}/permissions/{permissionId}
+	mux.HandleFunc("POST /api/v1/roles/{roleId}/permissions/{permissionId}", permissionHandler.AssignPermissionToRole)
+
+	// DELETE /api/v1/roles/{roleId}/permissions/{permissionId}
+	mux.HandleFunc("DELETE /api/v1/roles/{roleId}/permissions/{permissionId}", permissionHandler.RevokePermissionFromRole)
+
+	// POST /api/v1/roles/{roleId}/permissions/bulk
+	mux.HandleFunc("POST /api/v1/roles/{roleId}/permissions/bulk", permissionHandler.AssignBulkPermissions)
+
+	// GET /api/v1/roles/{roleId}/permissions
+	mux.HandleFunc("GET /api/v1/roles/{roleId}/permissions", permissionHandler.GetRolePermissions)
+
+	// ==================== HEALTH CHECK ====================
+
+	// GET /health
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	})
+
+	return mux
+}

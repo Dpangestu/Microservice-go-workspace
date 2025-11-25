@@ -5,55 +5,12 @@ import (
 	"time"
 )
 
-type Company struct {
-	ID        string
-	Name      string
-	Email     string
-	Phone     string
-	Address   string
-	Website   string
-	LogoURL   string
-	Timezone  string
-	Currency  string
-	IsActive  bool
-	CreatedAt time.Time
-	UpdatedAt *time.Time
-}
-
-type Tenant struct {
-	ID        string
-	Name      string
-	Status    string // Misalnya 'active', 'inactive'
-	CreatedAt time.Time
-	UpdatedAt *time.Time
-}
-
-type Role struct {
-	ID          string
-	TenantID    string // Tenant terkait dengan role ini
-	Name        string
-	Description string
-	Level       int  // Menentukan tingkat akses (misalnya admin, user)
-	IsSystem    bool // Apakah role ini adalah role sistem
-	IsActive    bool // Status role aktif atau tidak
-	CreatedAt   time.Time
-	UpdatedAt   *time.Time
-}
-
-type Permission struct {
-	ID          string
-	Name        string
-	Resource    string // Misalnya: "users", "products", dll
-	Action      string // Aksi pada resource, misalnya "create", "read", "update", "delete"
-	Description string
-	CreatedAt   time.Time
-	UpdatedAt   *time.Time
-}
-
+// User represents a user entity
 type User struct {
 	ID                  string        `json:"id"`
 	Username            string        `json:"username"`
 	Email               string        `json:"email"`
+	PasswordHash        string        `json:"password_hash"`
 	RoleID              int           `json:"role_id"`
 	IsActive            bool          `json:"is_active"`
 	IsLocked            bool          `json:"is_locked"`
@@ -66,7 +23,52 @@ type User struct {
 	Permissions         []*Permission `json:"permissions"`
 }
 
+// Role represents a role entity
+type Role struct {
+	ID          int
+	Name        string
+	Description string
+	Level       int
+	IsActive    bool
+	TenantID    *string
+	CreatedAt   time.Time
+	UpdatedAt   *time.Time
+}
+
+// Permission represents a permission entity
+type Permission struct {
+	ID          int
+	Name        string
+	Resource    string
+	Action      string
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   *time.Time
+}
+
+// RolePermission represents the relationship between role and permission
+type RolePermission struct {
+	ID           int
+	RoleID       int
+	PermissionID int
+	CreatedAt    time.Time
+}
+
+// UserActivity represents user activity audit logs
+type UserActivity struct {
+	ID          int
+	UserID      string
+	Action      string
+	Resource    string
+	Description string
+	IPAddress   string
+	UserAgent   string
+	CreatedAt   time.Time
+}
+
+// UserProfile represents additional user profile information
 type UserProfile struct {
+	ID          int             `json:"id"`
 	UserID      string          `json:"userId"`
 	FullName    *string         `json:"fullName,omitempty"`
 	DisplayName *string         `json:"displayName,omitempty"`
@@ -79,12 +81,36 @@ type UserProfile struct {
 	UpdatedAt   *time.Time      `json:"updatedAt"`
 }
 
-type UserActivity struct {
-	ID          string
-	UserID      string // Menghubungkan aktivitas dengan user
-	Action      string // Misalnya: "login", "create_user", dll
-	Description string
-	IPAddress   string
-	UserAgent   string
-	CreatedAt   time.Time
+// UserSettings represents user preference settings
+type UserSettings struct {
+	ID            int
+	UserID        string
+	ThemeMode     string
+	Language      string
+	TwoFAEnabled  bool
+	Notifications bool
+	CreatedAt     time.Time
+	UpdatedAt     *time.Time
+}
+
+// SycCoreUser represents sycrone core user entity
+type SycCoreUser struct {
+	ID            string    `json:"id"`
+	UserID        string    `json:"user_id"`
+	UserCore      string    `json:"user_core"`
+	KodeGroup1    string    `json:"kode_group_1"`
+	KodePerkiraan int       `json:"kode_perkiraan"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// Convenience method untuk membuat audit log
+func NewUserActivityLog(action, description, ip, ua string) *UserActivity {
+	return &UserActivity{
+		Action:      action,
+		Description: description,
+		IPAddress:   ip,
+		UserAgent:   ua,
+		CreatedAt:   time.Now(),
+	}
 }

@@ -47,13 +47,14 @@ type RateLimitConfig struct {
 }
 
 type Config struct {
-	Server         ServerCfg
-	DB             DBcfg
-	JWT            JWTcfg
-	Env            string
-	UserServiceURL string
-	Redis          RedisConfig
-	RateLimit      RateLimitConfig
+	Server            ServerCfg
+	DB                DBcfg
+	JWT               JWTcfg
+	Env               string
+	UserServiceURL    string
+	SyncCBSServiceURL string
+	Redis             RedisConfig
+	RateLimit         RateLimitConfig
 }
 
 func tryLoadDotEnv() {
@@ -112,6 +113,7 @@ func MustLoad() *Config {
 	authCodeTTL := parseDurOr(getEnv("OAUTH2_AUTH_CODE_EXPIRATION", "10m"), 10*time.Minute)
 
 	userSvcURL := getEnv("USER_SERVICE_URL", "http://user-service:9002")
+	syncCBSSvcURL := getEnv("SYNC_CBS_SERVICE_URL", "http://sync-cbs-service:9003")
 
 	return &Config{
 		Env: getEnv("APP_ENV", "local"),
@@ -137,7 +139,8 @@ func MustLoad() *Config {
 			AuthCodeTTL:    authCodeTTL,
 		},
 
-		UserServiceURL: userSvcURL,
+		UserServiceURL:    userSvcURL,
+		SyncCBSServiceURL: syncCBSSvcURL,
 
 		Redis: RedisConfig{
 			Addr:     getEnv("REDIS_ADDR", "redis:6379"),
